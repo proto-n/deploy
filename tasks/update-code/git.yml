@@ -14,6 +14,29 @@
     mode: 0400
   when: ansistrano_git_identity_key_remote_path|trim != ""
 
+- name: ANSISTRANO | GIT | Check if local repo exists
+  stat: "path={{ ansistrano_deploy_to }}/repo/"
+  register: ansistrano_git_local_repo_dir
+
+- name: ANSISTRANO | GIT | Query local commit hash
+  shell: git --git-dir "{{ ansistrano_deploy_to }}/repo/.git" show-ref heads/{{ ansistrano_git_branch }} -s
+  register: ansistrano_git_current_local_commit_hash
+  when: ansistrano_git_assert_change and ansistrano_git_local_repo_dir.stat.exists
+
+- name: ANSISTRANO | GIT | Query remote commit hash
+  shell: "git ls-remote {{ ansistrano_git_repo }} {{ ansistrano_git_branch }} | cut -f1"
+  environment:
+        GIT_SSH_COMMAND: "ssh -i {{ ansistrano_deploy_to }}/git_identity_key"
+  register: ansistrano_git_current_remote_commit_hash
+  when: ansistrano_git_assert_change and ansistrano_git_local_repo_dir.stat.exists
+
+- name: ANSISTRANO | GIT | Asserting change
+  assert:
+    that:
+      - "ansistrano_git_current_local_commit_hash.stdout != ansistrano_git_current_remote_commit_hash.stdout"
+    msg: "Aborting: the specified branch has not changed since the last deploy"
+  when: ansistrano_git_assert_change and ansistrano_git_local_repo_dir.stat.exists
+
 - name: ANSISTRANO | GIT | Update remote repository
   git:
     repo: "{{ ansistrano_git_repo }}"
